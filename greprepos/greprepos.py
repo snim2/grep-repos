@@ -13,13 +13,30 @@ from github.GithubException import UnknownObjectException
 
 
 def _get_github_data(token, org_name):
-    """Get data from GitHub."""
+    """Get repository data from GitHub, for all repositories in org_name."""
 
     api = Github(login_or_token=token, timeout=60)
     data = {}
     org = api.get_organization(org_name)
     for repo in org.get_repos():
-        data[repo.name] = []
+        repo_info = {}
+        repo_info["name"] = repo.name
+        repo_info["is_archived"] = repo.archived
+        repo_info["created_at"] = repo.created_at
+        repo_info["pushed_at"] = repo.pushed_at
+        repo_info["default_branch"] = repo.default_branch
+        repo_info["has_main_branch"] = "main" in [branch.name for branch in repo.get_branches()]
+        repo_info["is_private"] = repo.private
+        try:
+            repo.get_license()
+            repo_info["has_license_file"] = True
+        except UnknownObjectException:
+            repo_info["has_license_file"] = False
+        repo_info["topics"] = ",".join(repo.get_topics())
+        repo_info["forks_count"] = repo.forks_count
+        repo_info["open_issues"] = repo.open_issues_count
+        repo_info["open_prs"] = repo.get_pulls("open").totalCount
+        data[repo.name] = repo_info
     return data
 
 
