@@ -1,0 +1,48 @@
+#!/bin/sh
+
+# script/bootstrap: Resolve all dependencies that the application requires to run.
+
+set -e
+
+# Enable the running of this script from any subdirectory without moving to root.
+cd "$(dirname "$0")/.."
+
+echo
+echo "Installing pyenv-virtualenv..."
+echo
+
+brew install pyenv-virtualenv
+
+echo
+echo "Activating pyenv-virtualenv in this shell..."
+echo
+
+eval "$(pyenv init -)"
+eval "$(pyenv virtualenv-init -)"
+
+echo
+echo "Installing Python 3.10.6 as a virtual environment..."
+echo
+
+pyenv install 3.10.6
+
+echo
+echo "Creating a local Python3.10.6 virtual environment..."
+echo
+
+pyenv virtualenv 3.10.6 python3.10.6-grep-repos
+pyenv local python3.10.6-grep-repos
+pyenv activate python3.10.6-grep-repos
+
+echo
+echo "Installing dependencies..."
+echo
+
+pip install -r requirements.txt
+
+echo
+echo "Finished."
+echo "Please add the following to your ~/.zshrc file:"
+echo
+echo "eval \"$(pyenv init -)\""
+echo "eval \"$(pyenv virtualenv-init -)\""
