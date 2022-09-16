@@ -6,7 +6,7 @@ a CSV file of information about each one.
 """
 
 import argparse
-
+import csv
 
 from github import Github
 from github.GithubException import UnknownObjectException
@@ -40,14 +40,48 @@ def _get_github_data(token, org_name):
     return data
 
 
+def _write_csv_file(github_data, csvfile):
+    """Write out a CSV file containing the repo_data dictionary."""
+
+    headers = [
+        "name",
+        "is_archived",
+        "is_private",
+        "created_at",
+        "pushed_at",
+        "open_issues",
+        "open_prs",
+        "default_branch",
+        "has_main_branch",
+        "has_license_file",
+        "topics",
+        "forks_count",
+    ]
+    with open(csvfile, "wt", encoding="Utf-8") as out:
+        writer = csv.writer(out)
+        writer.writerow(headers)
+        for repo in github_data.values():
+            row = [repo[column] for column in headers]
+            writer.writerow(row)
+
+
 def _create_parser():
     """Create a parser for command line arguments."""
 
     apikey_help = "GitHub personal access token: https://github.com/settings/tokens"
+    csvfile_help = "Name of the CSV file to be written out, defaults to: github_repo_data.csv"
     org_help = "GitHub organization name"
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("-a", "--apikey", action="store", type=str, default="", help=apikey_help)
+    parser.add_argument(
+        "-c",
+        "--csvfile",
+        action="store",
+        type=str,
+        default="github_repo_data.csv",
+        help=csvfile_help,
+    )
     parser.add_argument("-o", "--organization", action="store", type=str, default="", help=org_help)
     return parser
 
@@ -55,7 +89,4 @@ def _create_parser():
 if __name__ == "__main__":
     options = _create_parser().parse_args()
     repo_data = _get_github_data(options.apikey, options.organization)
-    import pprint
-
-    printer = pprint.PrettyPrinter(depth=4)
-    printer.pprint(repo_data)
+    _write_csv_file(repo_data, options.csvfile)
