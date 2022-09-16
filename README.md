@@ -28,3 +28,12 @@ Run:
 ```
 
 to run a standard set of lints over the code here.
+
+## Installing Git hooks
+
+This repository contains a Git `pre-commit` hook that runs `shellcheck` over the shell
+scripts and calls `./script/test`. To install the Git hook, run:
+
+```shell
+./script/install-git-hooks
+```
