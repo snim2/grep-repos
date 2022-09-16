@@ -18,3 +18,13 @@ eval "$(pyenv virtualenv-init -)"
 ```
 
 The Python virtualenv that the `script/bootstrap` script created will then be automatically activated and deactivated whenever you enter/leave the root of the repository.
+
+## Linting the code
+
+Run:
+
+```shell
+./script/test
+```
+
+to run a standard set of lints over the code here.

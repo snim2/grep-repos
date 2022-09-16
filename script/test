@@ -1,0 +1,13 @@
+#!/bin/sh
+
+set -e
+
+MAX_LINE_LENGTH=120
+MODULE_UNDER_TEST=greprepos
+
+# Enable the running of this script from any subdirectory without moving to root.
+cd "$(dirname "$0")/.."
+
+pycodestyle --max-line-length=${MAX_LINE_LENGTH} ${MODULE_UNDER_TEST}
+pylint --max-line-length=${MAX_LINE_LENGTH} ${MODULE_UNDER_TEST}
+black --line-length ${MAX_LINE_LENGTH} ${MODULE_UNDER_TEST} --diff --color --check
