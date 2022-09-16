@@ -37,3 +37,14 @@ scripts and calls `./script/test`. To install the Git hook, run:
 ```shell
 ./script/install-git-hooks
 ```
+
+## Running the script
+
+To run the script, you first need to create a [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token).
+
+Assuming that token is stored in a file called `API_KEY`, you can run the script
+like this:
+
+```shell
+python -m greprepos.greprepos --apikey=$(cat API_KEY) --org="ORGANISATION_NAME"
+```
