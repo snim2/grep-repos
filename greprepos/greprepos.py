@@ -27,6 +27,8 @@ def _get_github_data(token, org_name):
         repo_info = {}
         repo_info["name"] = repo.name
         repo_info["is_archived"] = repo.archived
+        repo_info["is_private"] = repo.private
+        repo_info["is_fork"] = repo.fork
         repo_info["created_at"] = repo.created_at
         repo_info["pushed_at"] = repo.pushed_at
         repo_info["default_branch"] = repo.default_branch
@@ -37,7 +39,6 @@ def _get_github_data(token, org_name):
         has_master_branch = "master" in [branch.name for branch in branches]
         has_main_branch = "main" in [branch.name for branch in branches]
         repo_info["has_master_branch_but_no_main"] = has_master_branch and not has_main_branch
-        repo_info["is_private"] = repo.private
         try:
             repo.get_license()
             repo_info["has_license_file"] = True
@@ -58,6 +59,7 @@ def _write_csv_file(github_data, csvfile):
         "name",
         "is_archived",
         "is_private",
+        "is_fork",
         "created_at",
         "pushed_at",
         "default_branch",
