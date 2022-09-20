@@ -33,6 +33,7 @@ def _get_github_data(token, org_name):
         repo_info["pushed_at"] = repo.pushed_at
         repo_info["default_branch"] = repo.default_branch
         default_branch = repo.get_branch(repo.default_branch)
+        repo_info["commits_on_default_branch"] = repo.get_commits(sha=default_branch.name).totalCount
         last_commit = default_branch.raw_data["commit"]["commit"]["committer"]["date"]
         repo_info["last_commit_to_default_branch"] = datetime.strptime(last_commit, _DATETIME_FORMAT)
         branches = repo.get_branches()
@@ -63,6 +64,7 @@ def _write_csv_file(github_data, csvfile):
         "created_at",
         "pushed_at",
         "default_branch",
+        "commits_on_default_branch",
         "last_commit_to_default_branch",
         "open_issues",
         "open_prs",
