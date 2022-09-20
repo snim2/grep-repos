@@ -5,11 +5,16 @@ Iterate over a namespace of GitHub repos and generate
 a CSV file of information about each one.
 """
 
+from datetime import datetime
+
 import argparse
 import csv
 
 from github import Github
 from github.GithubException import UnknownObjectException
+
+
+_DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
 def _get_github_data(token, org_name):
@@ -25,6 +30,9 @@ def _get_github_data(token, org_name):
         repo_info["created_at"] = repo.created_at
         repo_info["pushed_at"] = repo.pushed_at
         repo_info["default_branch"] = repo.default_branch
+        default_branch = repo.get_branch(repo.default_branch)
+        last_commit = default_branch.raw_data["commit"]["commit"]["committer"]["date"]
+        repo_info["last_commit_to_default_branch"] = datetime.strptime(last_commit, _DATETIME_FORMAT)
         branches = repo.get_branches()
         has_master_branch = "master" in [branch.name for branch in branches]
         has_main_branch = "main" in [branch.name for branch in branches]
@@ -52,9 +60,10 @@ def _write_csv_file(github_data, csvfile):
         "is_private",
         "created_at",
         "pushed_at",
+        "default_branch",
+        "last_commit_to_default_branch",
         "open_issues",
         "open_prs",
-        "default_branch",
         "has_master_branch_but_no_main",
         "has_license_file",
         "topics",
