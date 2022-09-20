@@ -45,12 +45,24 @@ def _get_github_data(token, org_name):
             repo_info["has_license_file"] = True
         except UnknownObjectException:
             repo_info["has_license_file"] = False
+        repo_info["has_contributing"] = _repo_has_file(repo, "CONTRIBUTING.md")
+        repo_info["has_code_of_conduct"] = _repo_has_file(repo, "CODE_OF_CONDUCT.md")
         repo_info["topics"] = ",".join(repo.get_topics())
         repo_info["forks_count"] = repo.forks_count
         repo_info["open_issues"] = repo.open_issues_count
         repo_info["open_prs"] = repo.get_pulls("open").totalCount
         data[repo.name] = repo_info
     return data
+
+
+def _repo_has_file(repo, filename):
+    """Return True if repo contains filename and False otherwise."""
+
+    try:
+        repo.get_contents(filename)
+    except UnknownObjectException:
+        return False
+    return True
 
 
 def _write_csv_file(github_data, csvfile):
@@ -70,6 +82,8 @@ def _write_csv_file(github_data, csvfile):
         "open_prs",
         "has_master_branch_but_no_main",
         "has_license_file",
+        "has_contributing",
+        "has_code_of_conduct",
         "topics",
         "forks_count",
     ]
