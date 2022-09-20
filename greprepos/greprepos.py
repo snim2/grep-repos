@@ -23,6 +23,8 @@ def _get_github_data(token, org_name):
     api = Github(login_or_token=token, timeout=60)
     data = {}
     org = api.get_organization(org_name)
+    default_contrib = _get_default_contrib(org)
+    default_coc = _get_default_coc(org)
     for repo in org.get_repos():
         repo_info = {}
         repo_info["name"] = repo.name
@@ -46,13 +48,45 @@ def _get_github_data(token, org_name):
         except UnknownObjectException:
             repo_info["has_license_file"] = False
         repo_info["has_contributing"] = _repo_has_file(repo, "CONTRIBUTING.md")
+        if repo_info["has_contributing"]:
+            repo_info["contrib_matches_org_default"] = repo.get_contents("CONTRIBUTING.md").content == default_contrib
+        else:
+            repo_info["contrib_matches_org_default"] = False
         repo_info["has_code_of_conduct"] = _repo_has_file(repo, "CODE_OF_CONDUCT.md")
+        if repo_info["has_code_of_conduct"]:
+            repo_info["coc_matches_org_default"] = repo.get_contents("CODE_OF_CONDUCT.md").content == default_coc
+        else:
+            repo_info["coc_matches_org_default"] = False
         repo_info["topics"] = ",".join(repo.get_topics())
         repo_info["forks_count"] = repo.forks_count
         repo_info["open_issues"] = repo.open_issues_count
         repo_info["open_prs"] = repo.get_pulls("open").totalCount
         data[repo.name] = repo_info
     return data
+
+
+def _get_default_contrib(org):
+    """Get the default CONTRIBUTING.md for a given organization."""
+
+    return _get_default_file(org, "CONTRIBUTING.md")
+
+
+def _get_default_coc(org):
+    """Get the default CODE_OF_CONDUCT.md for a given organization."""
+
+    return _get_default_file(org, "CODE_OF_CONDUCT.md")
+
+
+def _get_default_file(org, filename):
+    """Get the default version of filename for a given organization."""
+
+    default_contrib = None
+    try:
+        repo = org.get_repo(".github")
+        default_contrib = repo.get_contents(filename).content
+    except UnknownObjectException:
+        pass
+    return default_contrib
 
 
 def _repo_has_file(repo, filename):
@@ -83,7 +117,9 @@ def _write_csv_file(github_data, csvfile):
         "has_master_branch_but_no_main",
         "has_license_file",
         "has_contributing",
+        "contrib_matches_org_default",
         "has_code_of_conduct",
+        "coc_matches_org_default",
         "topics",
         "forks_count",
     ]
