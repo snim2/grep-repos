@@ -7,6 +7,7 @@ a CSV file of information about each one.
 
 from argparse import ArgumentParser
 from datetime import datetime
+from enum import Enum
 from typing import Optional, Union
 
 import calendar
@@ -21,12 +22,16 @@ from github.Repository import Repository
 from github.GithubException import RateLimitExceededException, UnknownObjectException
 
 
+# URL of GitHub instance.
+_BASE_URL = "https://github.com"
 # Expected filename for codes of conduct.
 _CODE_OF_CONDUCT = "CODE_OF_CONDUCT.md"
 # Expected filename for contributing instructions.
 _CONTRIBUTING = "CONTRIBUTING.md"
 # Format for parsing GitHub datestamps.
 _DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+# Name of the repository that holds default files for the organisation.
+_ORG_DEFAULT_REPO = ".github"
 # When waiting for the rate limit to be reset, we add _TIME_DELTA seconds to
 # the wait time, to tbe sure that the next api call happens after the reset.
 _TIME_DELTA = 10
@@ -34,6 +39,20 @@ _TIME_DELTA = 10
 RepoDataType = dict[str, Union[bool, datetime, int, str]]
 # Type of data gathered from an entire GitHub organisation. Maps org_name -> data.
 OrgDataType = dict[str, RepoDataType]
+
+
+class RelationshipToOrgDefault(Enum):
+    """This enum describes how a file in a repo relates to the default file for the organisation.
+
+    For example, a default CODE_OF_CONDUCT file might be replicated throughout
+    the repositories in an organisation.
+    """
+
+    LINKS_TO = "links to"  # Repository file links to organisation default.
+    MATCHES = "matches"  # File is the same (str equals) as the organisation default.
+    MISSING = "missing"  # File is missing in repository.
+    NO_DEFAULT = "no organisation default"  # Organisation does not have a default file.
+    UNRELATED = "unrelated"  # Files exist and differ.
 
 
 def _get_github_data(token: str, org_name: str) -> OrgDataType:
@@ -49,8 +68,9 @@ def _get_github_data(token: str, org_name: str) -> OrgDataType:
     api = Github(login_or_token=token, timeout=60, retry=3)
     data = {}
     org = api.get_organization(org_name)
-    default_contrib = _get_default_contrib(org)
-    default_coc = _get_default_coc(org)
+    default_repo = _get_default_repo(org)
+    default_contrib = _get_file_contents(default_repo, _CONTRIBUTING) if default_repo is not None else None
+    default_coc = _get_file_contents(default_repo, _CODE_OF_CONDUCT) if default_repo is not None else None
     org_repos = org.get_repos()
     num_repos = org_repos.totalCount
     for index, repo in enumerate(org_repos):
@@ -97,18 +117,10 @@ def _get_repo_data(repo: Repository, default_contrib: Optional[str], default_coc
     except UnknownObjectException:
         repo_info["has_license_file"] = False
 
-    contributing = _get_file_contents(repo, _CONTRIBUTING)
-    repo_info["has_contributing"] = contributing is not None
-    if repo_info["has_contributing"] and default_contrib is not None:
-        repo_info["contrib_matches_org_default"] = contributing == default_contrib
-    else:
-        repo_info["contrib_matches_org_default"] = False
-    code_of_conduct = _get_file_contents(repo, _CODE_OF_CONDUCT)
-    repo_info["has_code_of_conduct"] = code_of_conduct is not None
-    if repo_info["has_code_of_conduct"] and default_coc is not None:
-        repo_info["coc_matches_org_default"] = code_of_conduct == default_coc
-    else:
-        repo_info["coc_matches_org_default"] = False
+    repo_info["contributing_relates_to_default"] = _get_relationship_to_org_default(
+        default_contrib, _CONTRIBUTING, repo
+    ).value
+    repo_info["coc_relates_to_default"] = _get_relationship_to_org_default(default_coc, _CODE_OF_CONDUCT, repo).value
     repo_info["topics"] = ",".join(repo.get_topics())
     repo_info["forks_count"] = repo.forks_count
     repo_info["open_issues"] = repo.open_issues_count
@@ -116,28 +128,39 @@ def _get_repo_data(repo: Repository, default_contrib: Optional[str], default_coc
     return repo_info
 
 
-def _get_default_contrib(org: Organization) -> Optional[str]:
-    """Get the default contributing instructions for a given organization."""
+def _get_relationship_to_org_default(
+    default: Optional[str],
+    filename: str,
+    repo: Repository,
+) -> RelationshipToOrgDefault:
+    """Does filename in repo match, or link to, the organisation default?"""
 
-    return _get_default_file(org, _CONTRIBUTING)
+    org_name = repo.organization.name
+    assert isinstance(org_name, str), f"{repo.name} does not have a related organisation."
+    repo_file = _get_file_contents(repo, filename)
+    relationship = RelationshipToOrgDefault.MISSING
+    if default is None:
+        relationship = RelationshipToOrgDefault.NO_DEFAULT
+    elif repo_file is None:
+        relationship = RelationshipToOrgDefault.MISSING
+    elif default == repo_file:
+        relationship = RelationshipToOrgDefault.MATCHES
+    elif "/".join((_BASE_URL, org_name, _ORG_DEFAULT_REPO, "blob", "main", filename)) in repo_file:
+        relationship = RelationshipToOrgDefault.LINKS_TO
+    else:
+        relationship = RelationshipToOrgDefault.UNRELATED
+    return relationship
 
 
-def _get_default_coc(org: Organization) -> Optional[str]:
-    """Get the default code of conduct for a given organization."""
-
-    return _get_default_file(org, _CODE_OF_CONDUCT)
-
-
-def _get_default_file(org: Organization, filename: str) -> Optional[str]:
+def _get_default_repo(org: Organization) -> Optional[Repository]:
     """Get the default version of filename for a given organization."""
 
-    default_file = None
+    default_repo = None
     try:
-        repo = org.get_repo(".github")
-        default_file = _get_file_contents(repo, filename)
+        default_repo = org.get_repo(_ORG_DEFAULT_REPO)
     except UnknownObjectException:
         pass
-    return default_file
+    return default_repo
 
 
 def _get_file_contents(repo: Repository, filename: str) -> Optional[str]:
@@ -151,7 +174,7 @@ def _get_file_contents(repo: Repository, filename: str) -> Optional[str]:
     try:
         content_file = repo.get_contents(filename)
         assert isinstance(content_file, ContentFile), "{filename} does not seem to be a file. Is it a directory?"
-        contents = content_file.content
+        contents = content_file.decoded_content.decode()
     except UnknownObjectException:
         pass
     return contents
@@ -174,10 +197,8 @@ def _write_csv_file(github_data: OrgDataType, csvfile: str) -> None:
         "open_prs",
         "has_master_branch_but_no_main",
         "has_license_file",
-        "has_contributing",
-        "contrib_matches_org_default",
-        "has_code_of_conduct",
-        "coc_matches_org_default",
+        "contributing_relates_to_default",
+        "coc_relates_to_default",
         "topics",
         "forks_count",
     ]
