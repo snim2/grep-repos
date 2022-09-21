@@ -11,6 +11,7 @@ from typing import Optional, Union
 
 import calendar
 import csv
+import logging
 import time
 
 from github import Github
@@ -51,20 +52,21 @@ def _get_github_data(token: str, org_name: str) -> OrgDataType:
     default_contrib = _get_default_contrib(org)
     default_coc = _get_default_coc(org)
     org_repos = org.get_repos()
-    for repo in org_repos:
+    num_repos = org_repos.totalCount
+    for index, repo in enumerate(org_repos):
+        logging.info("Looking at %s, repo %d of %d.", repo.name, index + 1, num_repos)
         try:
             data[repo.name] = _get_repo_data(repo, default_contrib, default_coc)
         except RateLimitExceededException:
             rate_limit = api.get_rate_limit().core
-            print(f"Rate limit remaining: {rate_limit.remaining}")
+            logging.info("Rate limit remaining: %d.", rate_limit.remaining)
             reset_timestamp = calendar.timegm(rate_limit.reset.timetuple())
             sleep_time = reset_timestamp - calendar.timegm(time.gmtime()) + _TIME_DELTA
+            logging.info("Waiting %ds until rate limit resets.", sleep_time)
             time.sleep(sleep_time)
             data[repo.name] = _get_repo_data(repo, default_contrib, default_coc)
             continue
-    assert (
-        len(data.keys()) == org_repos.totalCount
-    ), f"Got {len(data.keys())} repos but expected {org_repos.totalCount}."
+    assert len(data.keys()) == num_repos, f"Got {len(data.keys())} repos but expected {num_repos}."
     return data
 
 
@@ -209,6 +211,7 @@ def _create_parser() -> ArgumentParser:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(encoding="utf-8", level=logging.INFO)
     options = _create_parser().parse_args()
     repo_data = _get_github_data(options.apikey, options.organization)
     _write_csv_file(repo_data, options.csvfile)
