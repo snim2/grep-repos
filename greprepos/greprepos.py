@@ -5,14 +5,18 @@ Iterate over a namespace of GitHub repos and generate
 a CSV file of information about each one.
 """
 
+from argparse import ArgumentParser
 from datetime import datetime
+from typing import Optional, Union
 
-import argparse
 import calendar
 import csv
 import time
 
 from github import Github
+from github.ContentFile import ContentFile
+from github.Organization import Organization
+from github.Repository import Repository
 from github.GithubException import RateLimitExceededException, UnknownObjectException
 
 
@@ -21,9 +25,13 @@ _DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 # When waiting for the rate limit to be reset, we add _TIME_DELTA seconds to
 # the wait time, to tbe sure that the next api call happens after the reset.
 _TIME_DELTA = 10
+# Type of data gathered from a single GitHub repository. Maps repo_name -> data.
+RepoDataType = dict[str, Union[bool, datetime, int, str]]
+# Type of data gathered from an entire GitHub organisation. Maps org_name -> data.
+OrgDataType = dict[str, RepoDataType]
 
 
-def _get_github_data(token, org_name):
+def _get_github_data(token: str, org_name: str) -> OrgDataType:
     """Get repository data from GitHub, for all repositories in org_name.
 
     If we hit the API rate limit, wait until it has been reset, and carry on.
@@ -56,12 +64,12 @@ def _get_github_data(token, org_name):
     return data
 
 
-def _get_repo_data(repo, default_contrib, default_coc):
+def _get_repo_data(repo: Repository, default_contrib: Optional[str], default_coc: Optional[str]) -> RepoDataType:
     """Return a dict of repository information for one repo.
 
     Note that the dictionary keys here need to match those in _write_csv_file().
     """
-    repo_info = {}
+    repo_info: RepoDataType = {}
     repo_info["name"] = repo.name
     repo_info["is_archived"] = repo.archived
     repo_info["is_private"] = repo.private
@@ -82,14 +90,17 @@ def _get_repo_data(repo, default_contrib, default_coc):
         repo_info["has_license_file"] = True
     except UnknownObjectException:
         repo_info["has_license_file"] = False
-    repo_info["has_contributing"] = _repo_has_file(repo, "CONTRIBUTING.md")
-    if repo_info["has_contributing"]:
-        repo_info["contrib_matches_org_default"] = repo.get_contents("CONTRIBUTING.md").content == default_contrib
+
+    contributing = _get_file_contents(repo, "CONTRIBUTING.md")
+    repo_info["has_contributing"] = contributing is not None
+    if repo_info["has_contributing"] and default_contrib is not None:
+        repo_info["contrib_matches_org_default"] = contributing == default_contrib
     else:
         repo_info["contrib_matches_org_default"] = False
-    repo_info["has_code_of_conduct"] = _repo_has_file(repo, "CODE_OF_CONDUCT.md")
-    if repo_info["has_code_of_conduct"]:
-        repo_info["coc_matches_org_default"] = repo.get_contents("CODE_OF_CONDUCT.md").content == default_coc
+    code_of_conduct = _get_file_contents(repo, "CODE_OF_CONDUCT.md")
+    repo_info["has_code_of_conduct"] = code_of_conduct is not None
+    if repo_info["has_code_of_conduct"] and default_coc is not None:
+        repo_info["coc_matches_org_default"] = code_of_conduct == default_coc
     else:
         repo_info["coc_matches_org_default"] = False
     repo_info["topics"] = ",".join(repo.get_topics())
@@ -99,44 +110,51 @@ def _get_repo_data(repo, default_contrib, default_coc):
     return repo_info
 
 
-def _get_default_contrib(org):
+def _get_default_contrib(org: Organization) -> Optional[str]:
     """Get the default CONTRIBUTING.md for a given organization."""
 
     return _get_default_file(org, "CONTRIBUTING.md")
 
 
-def _get_default_coc(org):
+def _get_default_coc(org: Organization) -> Optional[str]:
     """Get the default CODE_OF_CONDUCT.md for a given organization."""
 
     return _get_default_file(org, "CODE_OF_CONDUCT.md")
 
 
-def _get_default_file(org, filename):
+def _get_default_file(org: Organization, filename: str) -> Optional[str]:
     """Get the default version of filename for a given organization."""
 
-    default_contrib = None
+    default_file = None
     try:
         repo = org.get_repo(".github")
-        default_contrib = repo.get_contents(filename).content
+        default_file = _get_file_contents(repo, filename)
     except UnknownObjectException:
         pass
-    return default_contrib
+    return default_file
 
 
-def _repo_has_file(repo, filename):
-    """Return True if repo contains filename and False otherwise."""
+def _get_file_contents(repo: Repository, filename: str) -> Optional[str]:
+    """Returns a file from the given repository, or None if the file does not exist.
 
+    This function expects that filename represents a file, and not a directory,
+    and will throw an AssertionError if given a directory.
+    """
+
+    contents = None
     try:
-        repo.get_contents(filename)
+        content_file = repo.get_contents(filename)
+        assert isinstance(content_file, ContentFile), "{filename} does not seem to be a file. Is it a directory?"
+        contents = content_file.content
     except UnknownObjectException:
-        return False
-    return True
+        pass
+    return contents
 
 
-def _write_csv_file(github_data, csvfile):
+def _write_csv_file(github_data: OrgDataType, csvfile: str) -> None:
     """Write out a CSV file containing the repo_data dictionary."""
 
-    headers = [
+    headers: list[str] = [
         "name",
         "is_archived",
         "is_private",
@@ -165,14 +183,14 @@ def _write_csv_file(github_data, csvfile):
             writer.writerow(row)
 
 
-def _create_parser():
+def _create_parser() -> ArgumentParser:
     """Create a parser for command line arguments."""
 
     apikey_help = "GitHub personal access token: https://github.com/settings/tokens"
     csvfile_help = "Name of the CSV file to be written out, defaults to: github_repo_data.csv"
     org_help = "GitHub organization name"
 
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = ArgumentParser(description=__doc__)
     parser.add_argument("-a", "--apikey", action="store", type=str, default="", help=apikey_help)
     parser.add_argument(
         "-c",
