@@ -20,6 +20,10 @@ from github.Repository import Repository
 from github.GithubException import RateLimitExceededException, UnknownObjectException
 
 
+# Expected filename for codes of conduct.
+_CODE_OF_CONDUCT = "CODE_OF_CONDUCT.md"
+# Expected filename for contributing instructions.
+_CONTRIBUTING = "CONTRIBUTING.md"
 # Format for parsing GitHub datestamps.
 _DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 # When waiting for the rate limit to be reset, we add _TIME_DELTA seconds to
@@ -91,13 +95,13 @@ def _get_repo_data(repo: Repository, default_contrib: Optional[str], default_coc
     except UnknownObjectException:
         repo_info["has_license_file"] = False
 
-    contributing = _get_file_contents(repo, "CONTRIBUTING.md")
+    contributing = _get_file_contents(repo, _CONTRIBUTING)
     repo_info["has_contributing"] = contributing is not None
     if repo_info["has_contributing"] and default_contrib is not None:
         repo_info["contrib_matches_org_default"] = contributing == default_contrib
     else:
         repo_info["contrib_matches_org_default"] = False
-    code_of_conduct = _get_file_contents(repo, "CODE_OF_CONDUCT.md")
+    code_of_conduct = _get_file_contents(repo, _CODE_OF_CONDUCT)
     repo_info["has_code_of_conduct"] = code_of_conduct is not None
     if repo_info["has_code_of_conduct"] and default_coc is not None:
         repo_info["coc_matches_org_default"] = code_of_conduct == default_coc
@@ -111,15 +115,15 @@ def _get_repo_data(repo: Repository, default_contrib: Optional[str], default_coc
 
 
 def _get_default_contrib(org: Organization) -> Optional[str]:
-    """Get the default CONTRIBUTING.md for a given organization."""
+    """Get the default contributing instructions for a given organization."""
 
-    return _get_default_file(org, "CONTRIBUTING.md")
+    return _get_default_file(org, _CONTRIBUTING)
 
 
 def _get_default_coc(org: Organization) -> Optional[str]:
-    """Get the default CODE_OF_CONDUCT.md for a given organization."""
+    """Get the default code of conduct for a given organization."""
 
-    return _get_default_file(org, "CODE_OF_CONDUCT.md")
+    return _get_default_file(org, _CODE_OF_CONDUCT)
 
 
 def _get_default_file(org: Organization, filename: str) -> Optional[str]:
