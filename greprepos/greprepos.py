@@ -8,61 +8,95 @@ a CSV file of information about each one.
 from datetime import datetime
 
 import argparse
+import calendar
 import csv
+import time
 
 from github import Github
-from github.GithubException import UnknownObjectException
+from github.GithubException import RateLimitExceededException, UnknownObjectException
 
 
+# Format for parsing GitHub datestamps.
 _DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+# When waiting for the rate limit to be reset, we add _TIME_DELTA seconds to
+# the wait time, to tbe sure that the next api call happens after the reset.
+_TIME_DELTA = 10
 
 
 def _get_github_data(token, org_name):
-    """Get repository data from GitHub, for all repositories in org_name."""
+    """Get repository data from GitHub, for all repositories in org_name.
 
-    api = Github(login_or_token=token, timeout=60)
+    If we hit the API rate limit, wait until it has been reset, and carry on.
+    The default value for timeout is 15 seconds. We use a much larger value, to
+    avoid having to restart this method from scratch. In practice, timeout
+    errors still occur, and so the value passed to retry ensures that API calls
+    are automatically retried after a timeout or a temporary error.
+    """
+
+    api = Github(login_or_token=token, timeout=60, retry=3)
     data = {}
     org = api.get_organization(org_name)
     default_contrib = _get_default_contrib(org)
     default_coc = _get_default_coc(org)
-    for repo in org.get_repos():
-        repo_info = {}
-        repo_info["name"] = repo.name
-        repo_info["is_archived"] = repo.archived
-        repo_info["is_private"] = repo.private
-        repo_info["is_fork"] = repo.fork
-        repo_info["created_at"] = repo.created_at
-        repo_info["pushed_at"] = repo.pushed_at
-        repo_info["default_branch"] = repo.default_branch
-        default_branch = repo.get_branch(repo.default_branch)
-        repo_info["commits_on_default_branch"] = repo.get_commits(sha=default_branch.name).totalCount
-        last_commit = default_branch.raw_data["commit"]["commit"]["committer"]["date"]
-        repo_info["last_commit_to_default_branch"] = datetime.strptime(last_commit, _DATETIME_FORMAT)
-        branches = repo.get_branches()
-        has_master_branch = "master" in [branch.name for branch in branches]
-        has_main_branch = "main" in [branch.name for branch in branches]
-        repo_info["has_master_branch_but_no_main"] = has_master_branch and not has_main_branch
+    org_repos = org.get_repos()
+    for repo in org_repos:
         try:
-            repo.get_license()
-            repo_info["has_license_file"] = True
-        except UnknownObjectException:
-            repo_info["has_license_file"] = False
-        repo_info["has_contributing"] = _repo_has_file(repo, "CONTRIBUTING.md")
-        if repo_info["has_contributing"]:
-            repo_info["contrib_matches_org_default"] = repo.get_contents("CONTRIBUTING.md").content == default_contrib
-        else:
-            repo_info["contrib_matches_org_default"] = False
-        repo_info["has_code_of_conduct"] = _repo_has_file(repo, "CODE_OF_CONDUCT.md")
-        if repo_info["has_code_of_conduct"]:
-            repo_info["coc_matches_org_default"] = repo.get_contents("CODE_OF_CONDUCT.md").content == default_coc
-        else:
-            repo_info["coc_matches_org_default"] = False
-        repo_info["topics"] = ",".join(repo.get_topics())
-        repo_info["forks_count"] = repo.forks_count
-        repo_info["open_issues"] = repo.open_issues_count
-        repo_info["open_prs"] = repo.get_pulls("open").totalCount
-        data[repo.name] = repo_info
+            data[repo.name] = _get_repo_data(repo, default_contrib, default_coc)
+        except RateLimitExceededException:
+            rate_limit = api.get_rate_limit().core
+            print(f"Rate limit remaining: {rate_limit.remaining}")
+            reset_timestamp = calendar.timegm(rate_limit.reset.timetuple())
+            sleep_time = reset_timestamp - calendar.timegm(time.gmtime()) + _TIME_DELTA
+            time.sleep(sleep_time)
+            data[repo.name] = _get_repo_data(repo, default_contrib, default_coc)
+            continue
+    assert (
+        len(data.keys()) == org_repos.totalCount
+    ), f"Got {len(data.keys())} repos but expected {org_repos.totalCount}."
     return data
+
+
+def _get_repo_data(repo, default_contrib, default_coc):
+    """Return a dict of repository information for one repo.
+
+    Note that the dictionary keys here need to match those in _write_csv_file().
+    """
+    repo_info = {}
+    repo_info["name"] = repo.name
+    repo_info["is_archived"] = repo.archived
+    repo_info["is_private"] = repo.private
+    repo_info["is_fork"] = repo.fork
+    repo_info["created_at"] = repo.created_at
+    repo_info["pushed_at"] = repo.pushed_at
+    repo_info["default_branch"] = repo.default_branch
+    default_branch = repo.get_branch(repo.default_branch)
+    repo_info["commits_on_default_branch"] = repo.get_commits(sha=default_branch.name).totalCount
+    last_commit = default_branch.raw_data["commit"]["commit"]["committer"]["date"]
+    repo_info["last_commit_to_default_branch"] = datetime.strptime(last_commit, _DATETIME_FORMAT)
+    branches = repo.get_branches()
+    has_master_branch = "master" in [branch.name for branch in branches]
+    has_main_branch = "main" in [branch.name for branch in branches]
+    repo_info["has_master_branch_but_no_main"] = has_master_branch and not has_main_branch
+    try:
+        repo.get_license()
+        repo_info["has_license_file"] = True
+    except UnknownObjectException:
+        repo_info["has_license_file"] = False
+    repo_info["has_contributing"] = _repo_has_file(repo, "CONTRIBUTING.md")
+    if repo_info["has_contributing"]:
+        repo_info["contrib_matches_org_default"] = repo.get_contents("CONTRIBUTING.md").content == default_contrib
+    else:
+        repo_info["contrib_matches_org_default"] = False
+    repo_info["has_code_of_conduct"] = _repo_has_file(repo, "CODE_OF_CONDUCT.md")
+    if repo_info["has_code_of_conduct"]:
+        repo_info["coc_matches_org_default"] = repo.get_contents("CODE_OF_CONDUCT.md").content == default_coc
+    else:
+        repo_info["coc_matches_org_default"] = False
+    repo_info["topics"] = ",".join(repo.get_topics())
+    repo_info["forks_count"] = repo.forks_count
+    repo_info["open_issues"] = repo.open_issues_count
+    repo_info["open_prs"] = repo.get_pulls("open").totalCount
+    return repo_info
 
 
 def _get_default_contrib(org):
