@@ -35,6 +35,8 @@ _ORG_DEFAULT_REPO = ".github"
 # When waiting for the rate limit to be reset, we add _TIME_DELTA seconds to
 # the wait time, to tbe sure that the next api call happens after the reset.
 _TIME_DELTA = 10
+# Expected file which describes why a repository is private.
+_WHY_PRIVATE = "WHY_PRIVATE.md"
 # Type of data gathered from a single GitHub repository. Maps repo_name -> data.
 RepoDataType = dict[str, Union[bool, datetime, int, str]]
 # Type of data gathered from an entire GitHub organisation. Maps org_name -> data.
@@ -121,6 +123,10 @@ def _get_repo_data(repo: Repository, default_contrib: Optional[str], default_coc
         default_contrib, _CONTRIBUTING, repo
     ).value
     repo_info["coc_relates_to_default"] = _get_relationship_to_org_default(default_coc, _CODE_OF_CONDUCT, repo).value
+    is_private_but_has_no_why_private = False
+    if repo_info["is_private"]:
+        is_private_but_has_no_why_private = _get_file_contents(repo, _WHY_PRIVATE) is None
+    repo_info["missing_why_private"] = is_private_but_has_no_why_private
     repo_info["topics"] = ",".join(repo.get_topics())
     repo_info["forks_count"] = repo.forks_count
     repo_info["open_issues"] = repo.open_issues_count
@@ -199,6 +205,7 @@ def _write_csv_file(github_data: OrgDataType, csvfile: str) -> None:
         "has_license_file",
         "contributing_relates_to_default",
         "coc_relates_to_default",
+        "missing_why_private",
         "topics",
         "forks_count",
     ]
