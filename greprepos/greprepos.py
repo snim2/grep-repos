@@ -89,7 +89,7 @@ def _get_github_data(token: str, org_name: str) -> OrgDataType:  # pylint: disab
             logging.info("Rate limit remaining: %d.", rate_limit.remaining)
             reset_timestamp = calendar.timegm(rate_limit.reset.timetuple())
             sleep_time = reset_timestamp - calendar.timegm(time.gmtime()) + _TIME_DELTA
-            logging.info("Waiting %ds until rate limit resets.", sleep_time)
+            logging.info("Waiting %dmin(s) %dsec(s) until rate limit resets.", int(sleep_time / 60), sleep_time % 60)
             time.sleep(sleep_time)
             data[repo.name] = _get_repo_data(repo, default_contrib, default_coc)
             continue
