@@ -57,7 +57,7 @@ class RelationshipToOrgDefault(Enum):
     UNRELATED = "unrelated"  # Files exist and differ.
 
 
-def _get_github_data(token: str, org_name: str) -> OrgDataType:
+def _get_github_data(token: str, org_name: str) -> OrgDataType:  # pylint: disable=too-many-locals
     """Get repository data from GitHub, for all repositories in org_name.
 
     If we hit the API rate limit, wait until it has been reset, and carry on.
@@ -75,7 +75,12 @@ def _get_github_data(token: str, org_name: str) -> OrgDataType:
     default_coc = _get_file_contents(default_repo, _CODE_OF_CONDUCT) if default_repo is not None else None
     org_repos = org.get_repos()
     num_repos = org_repos.totalCount
+    num_archived = 0
     for index, repo in enumerate(org_repos):
+        if repo.archived:
+            logging.info("%s is archived. Skipping.", repo.name)
+            num_archived += 1
+            continue
         logging.info("Looking at %s, repo %d of %d.", repo.name, index + 1, num_repos)
         try:
             data[repo.name] = _get_repo_data(repo, default_contrib, default_coc)
@@ -88,7 +93,8 @@ def _get_github_data(token: str, org_name: str) -> OrgDataType:
             time.sleep(sleep_time)
             data[repo.name] = _get_repo_data(repo, default_contrib, default_coc)
             continue
-    assert len(data.keys()) == num_repos, f"Got {len(data.keys())} repos but expected {num_repos}."
+    total_repos_seen = num_archived + len(data.keys())
+    assert total_repos_seen == org_repos.totalCount, f"Got {total_repos_seen} repos but expected {num_repos}."
     return data
 
 
