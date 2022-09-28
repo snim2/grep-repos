@@ -133,7 +133,13 @@ def _get_repo_data(repo: Repository, default_contrib: Optional[str], default_coc
     if repo_info["is_private"]:
         is_private_but_has_no_why_private = _get_file_contents(repo, _WHY_PRIVATE) is None
     repo_info["missing_why_private"] = is_private_but_has_no_why_private
-    repo_info["topics"] = ",".join(repo.get_topics())
+    repo_info["topics"] = ", ".join(repo.get_topics())
+    teams = []
+    try:
+        teams = [team.name for team in repo.get_teams()]
+    except UnknownObjectException:
+        pass
+    repo_info["teams"] = ", ".join(teams)
     repo_info["forks_count"] = repo.forks_count
     repo_info["open_issues"] = repo.open_issues_count
     repo_info["open_prs"] = repo.get_pulls("open").totalCount
@@ -212,6 +218,7 @@ def _write_csv_file(github_data: OrgDataType, csvfile: str) -> None:
         "contributing_relates_to_default",
         "coc_relates_to_default",
         "missing_why_private",
+        "teams",
         "topics",
         "forks_count",
     ]
