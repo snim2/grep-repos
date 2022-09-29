@@ -224,6 +224,11 @@ def _write_csv_file(github_data: OrgDataType, csvfile: str) -> None:
         "topics",
         "forks count",
     ]
+    if github_data:
+        actual_headers = list(github_data[list(github_data)[0]])
+        logging.debug("Expected headers: %s", repr(sorted(headers)))
+        logging.debug("Got headers:%s", repr(sorted(actual_headers)))
+        assert sorted(actual_headers) == sorted(headers), "You found a bug! Data does not have expected keys."
     with open(csvfile, "wt", encoding="Utf-8") as out:
         writer = csv.writer(out)
         writer.writerow(headers)
