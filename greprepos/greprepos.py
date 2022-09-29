@@ -105,34 +105,36 @@ def _get_repo_data(repo: Repository, default_contrib: Optional[str], default_coc
     """
     repo_info: RepoDataType = {}
     repo_info["name"] = repo.name
-    repo_info["is_archived"] = repo.archived
-    repo_info["is_private"] = repo.private
-    repo_info["is_fork"] = repo.fork
-    repo_info["created_at"] = repo.created_at
-    repo_info["pushed_at"] = repo.pushed_at
-    repo_info["default_branch"] = repo.default_branch
+    repo_info["is archived"] = repo.archived
+    repo_info["is private"] = repo.private
+    repo_info["is fork"] = repo.fork
+    repo_info["created at"] = repo.created_at
+    repo_info["pushed at"] = repo.pushed_at
+    repo_info["default branch"] = repo.default_branch
     default_branch = repo.get_branch(repo.default_branch)
-    repo_info["commits_on_default_branch"] = repo.get_commits(sha=default_branch.name).totalCount
+    repo_info["commits on default branch"] = repo.get_commits(sha=default_branch.name).totalCount
     last_commit = default_branch.raw_data["commit"]["commit"]["committer"]["date"]
-    repo_info["last_commit_to_default_branch"] = datetime.strptime(last_commit, _DATETIME_FORMAT)
+    repo_info["last commit to default branch"] = datetime.strptime(last_commit, _DATETIME_FORMAT)
     branches = repo.get_branches()
     has_master_branch = "master" in [branch.name for branch in branches]
     has_main_branch = "main" in [branch.name for branch in branches]
-    repo_info["has_master_branch_but_no_main"] = has_master_branch and not has_main_branch
+    repo_info["has master branch but no main"] = has_master_branch and not has_main_branch
     try:
         repo.get_license()
-        repo_info["has_license_file"] = True
+        repo_info["has license file"] = True
     except UnknownObjectException:
-        repo_info["has_license_file"] = False
+        repo_info["has license file"] = False
 
-    repo_info["contributing_relates_to_default"] = _get_relationship_to_org_default(
+    repo_info["contributing relates to org default"] = _get_relationship_to_org_default(
         default_contrib, _CONTRIBUTING, repo
     ).value
-    repo_info["coc_relates_to_default"] = _get_relationship_to_org_default(default_coc, _CODE_OF_CONDUCT, repo).value
+    repo_info["coc relates to org default"] = _get_relationship_to_org_default(
+        default_coc, _CODE_OF_CONDUCT, repo
+    ).value
     is_private_but_has_no_why_private = False
-    if repo_info["is_private"]:
+    if repo_info["is private"]:
         is_private_but_has_no_why_private = _get_file_contents(repo, _WHY_PRIVATE) is None
-    repo_info["missing_why_private"] = is_private_but_has_no_why_private
+    repo_info["missing why private"] = is_private_but_has_no_why_private
     repo_info["topics"] = ", ".join(repo.get_topics())
     teams = []
     try:
@@ -140,9 +142,9 @@ def _get_repo_data(repo: Repository, default_contrib: Optional[str], default_coc
     except UnknownObjectException:
         pass
     repo_info["teams"] = ", ".join(teams)
-    repo_info["forks_count"] = repo.forks_count
-    repo_info["open_issues"] = repo.open_issues_count
-    repo_info["open_prs"] = repo.get_pulls("open").totalCount
+    repo_info["forks count"] = repo.forks_count
+    repo_info["open issues"] = repo.open_issues_count
+    repo_info["open prs"] = repo.get_pulls("open").totalCount
     return repo_info
 
 
@@ -203,24 +205,24 @@ def _write_csv_file(github_data: OrgDataType, csvfile: str) -> None:
 
     headers: list[str] = [
         "name",
-        "is_archived",
-        "is_private",
-        "is_fork",
-        "created_at",
-        "pushed_at",
-        "default_branch",
-        "commits_on_default_branch",
-        "last_commit_to_default_branch",
-        "open_issues",
-        "open_prs",
-        "has_master_branch_but_no_main",
-        "has_license_file",
-        "contributing_relates_to_default",
-        "coc_relates_to_default",
-        "missing_why_private",
+        "is archived",
+        "is private",
+        "is fork",
+        "created at",
+        "pushed at",
+        "default branch",
+        "commits on default branch",
+        "last commit to default branch",
+        "open issues",
+        "open prs",
+        "has master branch but no main",
+        "has license file",
+        "contributing relates to org default",
+        "coc relates to org default",
+        "missing why private",
         "teams",
         "topics",
-        "forks_count",
+        "forks count",
     ]
     with open(csvfile, "wt", encoding="Utf-8") as out:
         writer = csv.writer(out)
