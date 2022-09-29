@@ -28,6 +28,8 @@ _BASE_URL = "https://github.com"
 _CODE_OF_CONDUCT = "CODE_OF_CONDUCT.md"
 # Expected filename for contributing instructions.
 _CONTRIBUTING = "CONTRIBUTING.md"
+# Default level for logging. Set at the module level and via a CLI option.
+_DEFAULT_LOGLEVEL = "INFO"
 # Format for parsing GitHub datestamps.
 _DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 # Name of the repository that holds default files for the organisation.
@@ -240,8 +242,11 @@ def _write_csv_file(github_data: OrgDataType, csvfile: str) -> None:
 def _create_parser() -> ArgumentParser:
     """Create a parser for command line arguments."""
 
+    valid_loglevels = list(logging._nameToLevel.keys())  # pylint: disable=W0212
+
     apikey_help = "GitHub personal access token: https://github.com/settings/tokens"
     csvfile_help = "Name of the CSV file to be written out, defaults to: github_repo_data.csv"
+    loglevel_help = f"Logging level, defaults to {_DEFAULT_LOGLEVEL}."
     org_help = "GitHub organization name"
 
     parser = ArgumentParser(description=__doc__)
@@ -254,12 +259,22 @@ def _create_parser() -> ArgumentParser:
         default="github_repo_data.csv",
         help=csvfile_help,
     )
+
+    parser.add_argument(
+        "-l",
+        "--loglevel",
+        action="store",
+        type=str,
+        default=_DEFAULT_LOGLEVEL,
+        choices=valid_loglevels,
+        help=loglevel_help,
+    )
     parser.add_argument("-o", "--organization", action="store", type=str, default="", help=org_help)
     return parser
 
 
 if __name__ == "__main__":
-    logging.basicConfig(encoding="utf-8", level=logging.INFO)
     options = _create_parser().parse_args()
+    logging.basicConfig(encoding="utf-8", level=options.loglevel)
     repo_data = _get_github_data(options.apikey, options.organization)
     _write_csv_file(repo_data, options.csvfile)
