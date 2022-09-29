@@ -191,7 +191,7 @@ def _get_file_contents(repo: Repository, filename: str) -> Optional[str]:
     contents = None
     try:
         content_file = repo.get_contents(filename)
-        assert isinstance(content_file, ContentFile), "{filename} does not seem to be a file. Is it a directory?"
+        assert isinstance(content_file, ContentFile), f"{filename} does not seem to be a file. Is it a directory?"
         contents = content_file.decoded_content.decode()
     except UnknownObjectException:
         pass
