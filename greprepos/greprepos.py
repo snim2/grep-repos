@@ -30,6 +30,8 @@ _CODE_OF_CONDUCT = "CODE_OF_CONDUCT.md"
 _CONTRIBUTING = "CONTRIBUTING.md"
 # Default level for logging. Set at the module level and via a CLI option.
 _DEFAULT_LOGLEVEL = "INFO"
+# Default filename for generated CSV data.
+_DEFAULT_OUTPUT_FILENAME = "github_repo_data.csv"
 # Format for parsing GitHub datestamps.
 _DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 # Name of the repository that holds default files for the organisation.
@@ -245,7 +247,7 @@ def _create_parser() -> ArgumentParser:
     valid_loglevels = list(logging._nameToLevel.keys())  # pylint: disable=W0212
 
     apikey_help = "GitHub personal access token: https://github.com/settings/tokens"
-    csvfile_help = "Name of the CSV file to be written out, defaults to: github_repo_data.csv"
+    csvfile_help = f"Name of the CSV file to be written out, defaults to: {_DEFAULT_OUTPUT_FILENAME}"
     loglevel_help = f"Logging level, defaults to {_DEFAULT_LOGLEVEL}."
     org_help = "GitHub organization name"
 
@@ -256,7 +258,7 @@ def _create_parser() -> ArgumentParser:
         "--csvfile",
         action="store",
         type=str,
-        default="github_repo_data.csv",
+        default=_DEFAULT_OUTPUT_FILENAME,
         help=csvfile_help,
     )
 
