@@ -39,6 +39,9 @@ _ORG_DEFAULT_REPO = ".github"
 # When waiting for the rate limit to be reset, we add _TIME_DELTA seconds to
 # the wait time, to tbe sure that the next api call happens after the reset.
 _TIME_DELTA = 10
+# Expected Travis CI config file. Used to detect which repositories need to be
+# migrated to GitHub actions.
+_TRAVIS_CI_CONFIG = ".travis.yml"
 # Expected file which describes why a repository is private.
 _WHY_PRIVATE = "WHY_PRIVATE.md"
 # Type of data gathered from a single GitHub repository. Maps repo_name -> data.
@@ -139,6 +142,7 @@ def _get_repo_data(repo: Repository, default_contrib: Optional[str], default_coc
     if repo_info["is private"]:
         is_private_but_has_no_why_private = _get_file_contents(repo, _WHY_PRIVATE) is None
     repo_info["missing why private"] = is_private_but_has_no_why_private
+    repo_info["uses_travis_ci"] = _get_file_contents(repo, _TRAVIS_CI_CONFIG) is not None
     repo_info["topics"] = ", ".join(repo.get_topics())
     teams = []
     try:
@@ -224,9 +228,10 @@ def _write_csv_file(github_data: OrgDataType, csvfile: str) -> None:
         "contributing relates to org default",
         "coc relates to org default",
         "missing why private",
+        "uses_travis_ci",
+        "forks count",
         "teams",
         "topics",
-        "forks count",
     ]
     if github_data:
         actual_headers = list(github_data[list(github_data)[0]])
