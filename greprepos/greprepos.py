@@ -192,7 +192,7 @@ def _get_relationship_to_org_default(
 
 
 def _get_default_repo(org: Organization) -> Optional[Repository]:
-    """Get the default version of filename for a given organization."""
+    """Get the default version of filename for a given organisation."""
 
     default_repo = None
     try:
@@ -261,19 +261,18 @@ def _write_csv_file(github_data: OrgDataType, csvfile: str) -> None:
 def _create_parser() -> ArgumentParser:
     """Create a parser for command line arguments."""
 
-    valid_loglevels = list(logging._nameToLevel.keys())  # pylint: disable=W0212
-
+    parser = ArgumentParser(description=__doc__)
+    # Required, positional arguments.
     apikey_help = "GitHub personal access token: https://github.com/settings/tokens"
+    parser.add_argument("apikey", action="store", type=str, help=apikey_help)
+    org_help = "Name of the GitHub organisation to be audited: https://docs.github.com/en/organizations"
+    parser.add_argument("org", action="store", type=str, default="", help=org_help)
+    # Optional arguments.
     bot_user_help = (
         "Optional username of a bot that creates automated PRs for standards compliance within the organization"
     )
-    csvfile_help = f"Name of the CSV file to be written out, defaults to: {_DEFAULT_OUTPUT_FILENAME}"
-    loglevel_help = f"Logging level, defaults to {_DEFAULT_LOGLEVEL}."
-    org_help = "GitHub organization name"
-
-    parser = ArgumentParser(description=__doc__)
-    parser.add_argument("-a", "--apikey", action="store", type=str, default="", help=apikey_help)
     parser.add_argument("-b", "--bot-user", action="store", type=str, default=None, help=bot_user_help)
+    csvfile_help = f"Name of the CSV file to be written out, defaults to: {_DEFAULT_OUTPUT_FILENAME}"
     parser.add_argument(
         "-c",
         "--csvfile",
@@ -282,6 +281,8 @@ def _create_parser() -> ArgumentParser:
         default=_DEFAULT_OUTPUT_FILENAME,
         help=csvfile_help,
     )
+    loglevel_help = f"Logging level, defaults to {_DEFAULT_LOGLEVEL}."
+    valid_loglevels = list(logging._nameToLevel.keys())  # pylint: disable=W0212
     parser.add_argument(
         "-l",
         "--loglevel",
@@ -291,13 +292,11 @@ def _create_parser() -> ArgumentParser:
         choices=valid_loglevels,
         help=loglevel_help,
     )
-    parser.add_argument("-o", "--organization", action="store", type=str, default="", help=org_help)
-
     return parser
 
 
 if __name__ == "__main__":
     options = _create_parser().parse_args()
     logging.basicConfig(encoding="utf-8", level=options.loglevel)
-    repo_data = _get_github_data(options.apikey, options.organization, options.bot_user)
+    repo_data = _get_github_data(options.apikey, options.org, options.bot_user)
     _write_csv_file(repo_data, options.csvfile)
