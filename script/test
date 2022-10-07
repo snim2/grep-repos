@@ -9,6 +9,7 @@ MODULE_UNDER_TEST=greprepos
 cd "$(dirname "$0")/.."
 
 pycodestyle --max-line-length=${MAX_LINE_LENGTH} ${MODULE_UNDER_TEST}
+flake8 --max-line-length=${MAX_LINE_LENGTH} ${MODULE_UNDER_TEST}
 pylint --max-line-length=${MAX_LINE_LENGTH} ${MODULE_UNDER_TEST}
 black --line-length ${MAX_LINE_LENGTH} ${MODULE_UNDER_TEST} --diff --color --check
 git ls-files '*.py' | xargs  mypy
