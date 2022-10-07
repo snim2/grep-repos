@@ -64,7 +64,9 @@ class RelationshipToOrgDefault(Enum):
     UNRELATED = "unrelated"  # Files exist and differ.
 
 
-def _get_github_data(token: str, org_name: str) -> OrgDataType:  # pylint: disable=too-many-locals
+def _get_github_data(  # pylint: disable=too-many-locals
+    token: str, org_name: str, bot_user: Optional[str]
+) -> OrgDataType:
     """Get repository data from GitHub, for all repositories in org_name.
 
     If we hit the API rate limit, wait until it has been reset, and carry on.
@@ -90,7 +92,7 @@ def _get_github_data(token: str, org_name: str) -> OrgDataType:  # pylint: disab
             continue
         logging.info("Looking at %s, repo %d of %d.", repo.name, index + 1, num_repos)
         try:
-            data[repo.name] = _get_repo_data(repo, default_contrib, default_coc)
+            data[repo.name] = _get_repo_data(repo, default_contrib, default_coc, bot_user)
         except RateLimitExceededException:
             rate_limit = api.get_rate_limit().core
             logging.info("Rate limit remaining: %d.", rate_limit.remaining)
@@ -98,14 +100,16 @@ def _get_github_data(token: str, org_name: str) -> OrgDataType:  # pylint: disab
             sleep_time = reset_timestamp - calendar.timegm(time.gmtime()) + _TIME_DELTA
             logging.info("Waiting %dmin(s) %dsec(s) until rate limit resets.", int(sleep_time / 60), sleep_time % 60)
             time.sleep(sleep_time)
-            data[repo.name] = _get_repo_data(repo, default_contrib, default_coc)
+            data[repo.name] = _get_repo_data(repo, default_contrib, default_coc, bot_user)
             continue
     total_repos_seen = num_archived + len(data.keys())
     assert total_repos_seen == org_repos.totalCount, f"Got {total_repos_seen} repos but expected {num_repos}."
     return data
 
 
-def _get_repo_data(repo: Repository, default_contrib: Optional[str], default_coc: Optional[str]) -> RepoDataType:
+def _get_repo_data(
+    repo: Repository, default_contrib: Optional[str], default_coc: Optional[str], bot_user: Optional[str]
+) -> RepoDataType:
     """Return a dict of repository information for one repo.
 
     Note that the dictionary keys here need to match those in _write_csv_file().
@@ -152,7 +156,14 @@ def _get_repo_data(repo: Repository, default_contrib: Optional[str], default_coc
     repo_info["teams"] = ", ".join(teams)
     repo_info["forks count"] = repo.forks_count
     repo_info["open issues"] = repo.open_issues_count
-    repo_info["open prs"] = repo.get_pulls("open").totalCount
+    pulls = repo.get_pulls("open")
+    repo_info["open prs"] = pulls.totalCount
+    has_automated_pr = False
+    if bot_user is not None:
+        for pull in pulls:
+            if pull.user.login == bot_user:
+                has_automated_pr = True
+    repo_info["has unmerged PR(s) from org bot"] = has_automated_pr
     return repo_info
 
 
@@ -181,7 +192,7 @@ def _get_relationship_to_org_default(
 
 
 def _get_default_repo(org: Organization) -> Optional[Repository]:
-    """Get the default version of filename for a given organization."""
+    """Get the default version of filename for a given organisation."""
 
     default_repo = None
     try:
@@ -228,6 +239,7 @@ def _write_csv_file(github_data: OrgDataType, csvfile: str) -> None:
         "contributing relates to org default",
         "coc relates to org default",
         "missing why private",
+        "has unmerged PR(s) from org bot",
         "uses Travis CI",
         "forks count",
         "teams",
@@ -249,15 +261,18 @@ def _write_csv_file(github_data: OrgDataType, csvfile: str) -> None:
 def _create_parser() -> ArgumentParser:
     """Create a parser for command line arguments."""
 
-    valid_loglevels = list(logging._nameToLevel.keys())  # pylint: disable=W0212
-
-    apikey_help = "GitHub personal access token: https://github.com/settings/tokens"
-    csvfile_help = f"Name of the CSV file to be written out, defaults to: {_DEFAULT_OUTPUT_FILENAME}"
-    loglevel_help = f"Logging level, defaults to {_DEFAULT_LOGLEVEL}."
-    org_help = "GitHub organization name"
-
     parser = ArgumentParser(description=__doc__)
-    parser.add_argument("-a", "--apikey", action="store", type=str, default="", help=apikey_help)
+    # Required, positional arguments.
+    apikey_help = "GitHub personal access token: https://github.com/settings/tokens"
+    parser.add_argument("apikey", action="store", type=str, help=apikey_help)
+    org_help = "Name of the GitHub organisation to be audited: https://docs.github.com/en/organizations"
+    parser.add_argument("org", action="store", type=str, default="", help=org_help)
+    # Optional arguments.
+    bot_user_help = (
+        "Optional username of a bot that creates automated PRs for standards compliance within the organization"
+    )
+    parser.add_argument("-b", "--bot-user", action="store", type=str, default=None, help=bot_user_help)
+    csvfile_help = f"Name of the CSV file to be written out, defaults to: {_DEFAULT_OUTPUT_FILENAME}"
     parser.add_argument(
         "-c",
         "--csvfile",
@@ -266,7 +281,8 @@ def _create_parser() -> ArgumentParser:
         default=_DEFAULT_OUTPUT_FILENAME,
         help=csvfile_help,
     )
-
+    loglevel_help = f"Logging level, defaults to {_DEFAULT_LOGLEVEL}."
+    valid_loglevels = list(logging._nameToLevel.keys())  # pylint: disable=W0212
     parser.add_argument(
         "-l",
         "--loglevel",
@@ -276,12 +292,11 @@ def _create_parser() -> ArgumentParser:
         choices=valid_loglevels,
         help=loglevel_help,
     )
-    parser.add_argument("-o", "--organization", action="store", type=str, default="", help=org_help)
     return parser
 
 
 if __name__ == "__main__":
     options = _create_parser().parse_args()
     logging.basicConfig(encoding="utf-8", level=options.loglevel)
-    repo_data = _get_github_data(options.apikey, options.organization)
+    repo_data = _get_github_data(options.apikey, options.org, options.bot_user)
     _write_csv_file(repo_data, options.csvfile)
