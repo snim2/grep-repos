@@ -36,6 +36,10 @@ _DEFAULT_OUTPUT_FILENAME = "github_repo_data.csv"
 _DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 # Name of the repository that holds default files for the organisation.
 _ORG_DEFAULT_REPO = ".github"
+# Title of the Renovate bot configuration PRs.
+_RENOVATE_CONFIGURE_PR = "Configure Renovate"
+# Username of the bot that generates Renovate PRs.
+_RENOVATE_USER = "renovate[bot]"
 # When waiting for the rate limit to be reset, we add _TIME_DELTA seconds to
 # the wait time, to tbe sure that the next api call happens after the reset.
 _TIME_DELTA = 10
@@ -44,10 +48,15 @@ _TIME_DELTA = 10
 _TRAVIS_CI_CONFIG = ".travis.yml"
 # Expected file which describes why a repository is private.
 _WHY_PRIVATE = "WHY_PRIVATE.md"
+
 # Type of data gathered from a single GitHub repository. Maps repo_name -> data.
 RepoDataType = dict[str, Union[bool, datetime, int, str]]
 # Type of data gathered from an entire GitHub organisation. Maps org_name -> data.
 OrgDataType = dict[str, RepoDataType]
+
+
+# pylint: disable=too-many-locals
+# pylint: disable=too-many-statements
 
 
 class RelationshipToOrgDefault(Enum):
@@ -64,9 +73,7 @@ class RelationshipToOrgDefault(Enum):
     UNRELATED = "unrelated"  # Files exist and differ.
 
 
-def _get_github_data(  # pylint: disable=too-many-locals
-    token: str, org_name: str, bot_user: Optional[str]
-) -> OrgDataType:
+def _get_github_data(token: str, org_name: str, bot_user: Optional[str]) -> OrgDataType:
     """Get repository data from GitHub, for all repositories in org_name.
 
     If we hit the API rate limit, wait until it has been reset, and carry on.
@@ -83,14 +90,14 @@ def _get_github_data(  # pylint: disable=too-many-locals
     default_contrib = _get_file_contents(default_repo, _CONTRIBUTING) if default_repo is not None else None
     default_coc = _get_file_contents(default_repo, _CODE_OF_CONDUCT) if default_repo is not None else None
     org_repos = org.get_repos()
-    num_repos = org_repos.totalCount
+    num_repos_in_org = org_repos.totalCount
     num_archived = 0
     for index, repo in enumerate(org_repos):
         if repo.archived:
             logging.info("%s is archived. Skipping.", repo.name)
             num_archived += 1
             continue
-        logging.info("Looking at %s, repo %d of %d.", repo.name, index + 1, num_repos)
+        logging.info("Looking at %s, repo %d of %d.", repo.name, index + 1, num_repos_in_org)
         try:
             data[repo.name] = _get_repo_data(repo, default_contrib, default_coc, bot_user)
         except RateLimitExceededException:
@@ -103,7 +110,14 @@ def _get_github_data(  # pylint: disable=too-many-locals
             data[repo.name] = _get_repo_data(repo, default_contrib, default_coc, bot_user)
             continue
     total_repos_seen = num_archived + len(data.keys())
-    assert total_repos_seen == org_repos.totalCount, f"Got {total_repos_seen} repos but expected {num_repos}."
+    logging.info(
+        "Summary: %d archived | %d to write into CSV file | %d total repos in %s.",
+        num_archived,
+        total_repos_seen,
+        num_repos_in_org,
+        org_name,
+    )
+    assert total_repos_seen == org_repos.totalCount, f"Got {total_repos_seen} repos but expected {num_repos_in_org}."
     return data
 
 
@@ -135,7 +149,6 @@ def _get_repo_data(
         repo_info["has license file"] = True
     except UnknownObjectException:
         repo_info["has license file"] = False
-
     repo_info["contributing relates to org default"] = _get_relationship_to_org_default(
         default_contrib, _CONTRIBUTING, repo
     ).value
@@ -159,10 +172,16 @@ def _get_repo_data(
     pulls = repo.get_pulls("open")
     repo_info["open prs"] = pulls.totalCount
     has_automated_pr = False
-    if bot_user is not None:
-        for pull in pulls:
+    has_configure_renovate_pr = False
+    for pull in pulls:
+        if pull.title == _RENOVATE_CONFIGURE_PR and pull.user.login == _RENOVATE_USER:
+            has_configure_renovate_pr = True
+        if bot_user is not None:
             if pull.user.login == bot_user:
                 has_automated_pr = True
+        if (has_configure_renovate_pr and has_automated_pr) or (has_configure_renovate_pr and bot_user is None):
+            break
+    repo_info[f"has unmerged {_RENOVATE_CONFIGURE_PR} PR"] = has_configure_renovate_pr
     repo_info["has unmerged PR(s) from org bot"] = has_automated_pr
     return repo_info
 
@@ -239,6 +258,7 @@ def _write_csv_file(github_data: OrgDataType, csvfile: str) -> None:
         "contributing relates to org default",
         "coc relates to org default",
         "missing why private",
+        f"has unmerged {_RENOVATE_CONFIGURE_PR} PR",
         "has unmerged PR(s) from org bot",
         "uses Travis CI",
         "forks count",
@@ -249,13 +269,17 @@ def _write_csv_file(github_data: OrgDataType, csvfile: str) -> None:
         actual_headers = list(github_data[list(github_data)[0]])
         logging.debug("Expected headers: %s", repr(sorted(headers)))
         logging.debug("Got headers:%s", repr(sorted(actual_headers)))
-        assert sorted(actual_headers) == sorted(headers), "You found a bug! Data does not have expected keys."
+        diff = sorted(set(headers).symmetric_difference(actual_headers))
+        assert sorted(actual_headers) == sorted(
+            headers
+        ), f"You found a bug! Data does not have expected keys. This was the diff:{repr(diff)}"
     with open(csvfile, "wt", encoding="Utf-8") as out:
         writer = csv.writer(out)
         writer.writerow(headers)
         for repo in github_data.values():
             row = [repo[column] for column in headers]
             writer.writerow(row)
+    logging.info("CSV data written to %s.", csvfile)
 
 
 def _create_parser() -> ArgumentParser:
