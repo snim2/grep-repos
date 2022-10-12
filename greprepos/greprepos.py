@@ -90,14 +90,14 @@ def _get_github_data(token: str, org_name: str, bot_user: Optional[str]) -> OrgD
     default_contrib = _get_file_contents(default_repo, _CONTRIBUTING) if default_repo is not None else None
     default_coc = _get_file_contents(default_repo, _CODE_OF_CONDUCT) if default_repo is not None else None
     org_repos = org.get_repos()
-    num_repos = org_repos.totalCount
+    num_repos_in_org = org_repos.totalCount
     num_archived = 0
     for index, repo in enumerate(org_repos):
         if repo.archived:
             logging.info("%s is archived. Skipping.", repo.name)
             num_archived += 1
             continue
-        logging.info("Looking at %s, repo %d of %d.", repo.name, index + 1, num_repos)
+        logging.info("Looking at %s, repo %d of %d.", repo.name, index + 1, num_repos_in_org)
         try:
             data[repo.name] = _get_repo_data(repo, default_contrib, default_coc, bot_user)
         except RateLimitExceededException:
@@ -110,7 +110,14 @@ def _get_github_data(token: str, org_name: str, bot_user: Optional[str]) -> OrgD
             data[repo.name] = _get_repo_data(repo, default_contrib, default_coc, bot_user)
             continue
     total_repos_seen = num_archived + len(data.keys())
-    assert total_repos_seen == org_repos.totalCount, f"Got {total_repos_seen} repos but expected {num_repos}."
+    logging.info(
+        "Summary: %d archived | %d to write into CSV file | %d total repos in %s.",
+        num_archived,
+        total_repos_seen,
+        num_repos_in_org,
+        org_name,
+    )
+    assert total_repos_seen == org_repos.totalCount, f"Got {total_repos_seen} repos but expected {num_repos_in_org}."
     return data
 
 
