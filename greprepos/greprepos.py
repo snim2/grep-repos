@@ -279,6 +279,7 @@ def _write_csv_file(github_data: OrgDataType, csvfile: str) -> None:
         for repo in github_data.values():
             row = [repo[column] for column in headers]
             writer.writerow(row)
+    logging.info("CSV data written to %s.", csvfile)
 
 
 def _create_parser() -> ArgumentParser:
