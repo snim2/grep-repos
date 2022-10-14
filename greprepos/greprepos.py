@@ -133,6 +133,10 @@ def _get_repo_data(
     repo_info["is archived"] = repo.archived
     repo_info["is private"] = repo.private
     repo_info["is fork"] = repo.fork
+    # The upstream PR that added the `is_template` property to the Repository class did not also add type information
+    # the corresponding .pyi file, which causes MyPy to issue a spurious error. See:
+    # https://github.com/PyGithub/PyGithub/pull/1395/
+    repo_info["is template"] = repo.is_template  # type: ignore
     repo_info["created at"] = repo.created_at
     repo_info["pushed at"] = repo.pushed_at
     repo_info["default branch"] = repo.default_branch
@@ -246,6 +250,7 @@ def _write_csv_file(github_data: OrgDataType, csvfile: str) -> None:
         "is archived",
         "is private",
         "is fork",
+        "is template",
         "created at",
         "pushed at",
         "default branch",
